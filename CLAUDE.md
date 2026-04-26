@@ -14,7 +14,7 @@ cd backend && uv run uvicorn app:app --reload --port 8000
 
 The app is served at `http://localhost:8000`. The API docs are at `http://localhost:8000/docs`.
 
-Install dependencies with `uv sync`. Requires an `ANTHROPIC_API_KEY` in `.env` at the repo root.
+Install dependencies with `uv sync`. Add new packages with `uv add <package>`. Run Python scripts with `uv run python <file>`. Requires an `ANTHROPIC_API_KEY` in `.env` at the repo root.
 
 ## Architecture
 
