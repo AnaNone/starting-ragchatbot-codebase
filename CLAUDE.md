@@ -76,7 +76,12 @@ The course title is the primary key — re-uploading a file with the same title 
 
 ### ChromaDB collections
 
-- **`course_catalog`**: one document per course; stores title, instructor, course link, and serialized lessons JSON
-- **`course_content`**: one document per text chunk; stores `course_title`, `lesson_number`, `chunk_index`; IDs are `{course_title}_{chunk_index}`
+**`course_catalog`** — course titles for name resolution
+- Metadata per course: `title`, `instructor`, `course_link`, `lesson_count`, `lessons_json`
+- `lessons_json` is a serialized list of `{lesson_number, lesson_title, lesson_link}`
+
+**`course_content`** — text chunks for semantic search
+- Metadata per chunk: `course_title`, `lesson_number`, `chunk_index`
+- IDs are `{course_title}_{chunk_index}`
 
 Course name resolution in `VectorStore.search()` uses semantic search against `course_catalog` before filtering `course_content`, so partial/fuzzy course names work.
