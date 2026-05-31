@@ -30,6 +30,9 @@ function setupEventListeners() {
     });
     
     
+    // New chat
+    document.getElementById('newChatBtn').addEventListener('click', createNewSession);
+
     // Suggested questions
     document.querySelectorAll('.suggested-item').forEach(button => {
         button.addEventListener('click', (e) => {
