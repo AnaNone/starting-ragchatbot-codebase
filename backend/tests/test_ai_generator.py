@@ -116,6 +116,122 @@ def test_tools_passed_in_first_call(gen, mock_client):
     assert first_call_kwargs.get("tool_choice") == {"type": "auto"}
 
 
+def test_sequential_two_round_tool_use(gen, mock_client):
+    """Claude can call a tool, see the results, then call a second tool before answering."""
+    mock_client.messages.create.side_effect = [
+        _tool_use_response("get_course_outline", "tu_001", {"course_name": "ML Intro"}),
+        _tool_use_response("search_course_content", "tu_002", {"query": "backpropagation", "lesson_number": 3}),
+        _text_response("Lesson 3 covers backpropagation in detail."),
+    ]
+    tool_manager = MagicMock()
+    tool_manager.execute_tool.side_effect = [
+        "Course: ML Intro\nLesson 3: Backpropagation",
+        "[ML Intro - Lesson 3]\nBackpropagation explanation...",
+    ]
+
+    result = gen.generate_response(
+        query="Tell me about backpropagation in the ML Intro course",
+        tools=[{"name": "get_course_outline"}, {"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    assert mock_client.messages.create.call_count == 3
+    assert tool_manager.execute_tool.call_count == 2
+    tool_manager.execute_tool.assert_any_call("get_course_outline", course_name="ML Intro")
+    tool_manager.execute_tool.assert_any_call("search_course_content", query="backpropagation", lesson_number=3)
+    assert result == "Lesson 3 covers backpropagation in detail."
+
+
+def test_messages_accumulate_across_rounds(gen, mock_client):
+    """Every round's tool_use/tool_result messages are threaded into later API calls."""
+    mock_client.messages.create.side_effect = [
+        _tool_use_response("get_course_outline", "tu_a", {"course_name": "ML Intro"}),
+        _tool_use_response("search_course_content", "tu_b", {"query": "gradient descent"}),
+        _text_response("Final synthesized answer."),
+    ]
+    tool_manager = MagicMock()
+    tool_manager.execute_tool.side_effect = ["outline result", "search result"]
+
+    gen.generate_response(
+        query="Explain gradient descent in ML Intro",
+        tools=[{"name": "get_course_outline"}, {"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    final_call_kwargs = mock_client.messages.create.call_args_list[2][1]
+    messages = final_call_kwargs["messages"]
+    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
+    assert messages[2]["content"][0]["tool_use_id"] == "tu_a"
+    assert messages[2]["content"][0]["content"] == "outline result"
+    assert messages[4]["content"][0]["tool_use_id"] == "tu_b"
+    assert messages[4]["content"][0]["content"] == "search result"
+
+
+def test_stops_as_soon_as_claude_is_done(gen, mock_client):
+    """The loop exits the moment stop_reason != tool_use, without spending the full round budget."""
+    mock_client.messages.create.side_effect = [
+        _tool_use_response("search_course_content", "tu_001", {"query": "transformers"}),
+        _text_response("Done after a single round."),
+    ]
+    tool_manager = MagicMock()
+    tool_manager.execute_tool.return_value = "search result"
+
+    result = gen.generate_response(
+        query="What are transformers?",
+        tools=[{"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    assert mock_client.messages.create.call_count == 2
+    assert result == "Done after a single round."
+
+
+def test_max_rounds_forces_final_call_without_tools(gen, mock_client):
+    """Once max_tool_rounds is reached, the final API call omits tools, forcing a text answer."""
+    mock_client.messages.create.side_effect = [
+        _tool_use_response("search_course_content", "tu_001", {"query": "round 1"}),
+        _tool_use_response("search_course_content", "tu_002", {"query": "round 2"}),
+        _text_response("Best-effort answer after exhausting tool rounds."),
+    ]
+    tool_manager = MagicMock()
+    tool_manager.execute_tool.return_value = "search result"
+
+    result = gen.generate_response(
+        query="A query that needs many lookups",
+        tools=[{"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    assert mock_client.messages.create.call_count == gen.max_tool_rounds + 1
+    last_call_kwargs = mock_client.messages.create.call_args_list[-1][1]
+    assert "tools" not in last_call_kwargs
+    assert result == "Best-effort answer after exhausting tool rounds."
+
+
+def test_hard_tool_error_wraps_up_with_is_error(gen, mock_client):
+    """An exception from execute_tool is surfaced as an is_error tool_result and the loop stops immediately."""
+    mock_client.messages.create.side_effect = [
+        _tool_use_response("search_course_content", "tu_001", {"query": "transformers"}),
+        _text_response("I couldn't search right now, but here's what I know..."),
+    ]
+    tool_manager = MagicMock()
+    tool_manager.execute_tool.side_effect = RuntimeError("vector store unavailable")
+
+    result = gen.generate_response(
+        query="What are transformers?",
+        tools=[{"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    assert mock_client.messages.create.call_count == 2
+    second_call_kwargs = mock_client.messages.create.call_args_list[1][1]
+    tool_result = second_call_kwargs["messages"][-1]["content"][0]
+    assert tool_result["type"] == "tool_result"
+    assert tool_result["is_error"] is True
+    assert "vector store unavailable" in tool_result["content"]
+    assert result == "I couldn't search right now, but here's what I know..."
+
+
 def test_anthropic_exception_propagates(gen, mock_client):
     """
     When client.messages.create() raises an Anthropic exception, it propagates
