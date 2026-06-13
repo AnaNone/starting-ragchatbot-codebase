@@ -100,7 +100,7 @@ Provide only the direct answer to what was asked.
 
             tool_results, fatal_error = self._execute_tool_round(response, tool_manager)
             if not tool_results:
-                return response.content[0].text
+                return "I was unable to process your request."
             messages.append({"role": "user", "content": tool_results})
 
             # On a hard tool failure, stop looping and let Claude give a

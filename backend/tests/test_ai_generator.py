@@ -232,6 +232,25 @@ def test_hard_tool_error_wraps_up_with_is_error(gen, mock_client):
     assert result == "I couldn't search right now, but here's what I know..."
 
 
+def test_empty_tool_results_returns_fallback(gen, mock_client):
+    """stop_reason=tool_use but no tool_use blocks in content returns a fallback string, no AttributeError."""
+    resp = MagicMock()
+    resp.stop_reason = "tool_use"
+    resp.content = []  # no tool_use blocks — _execute_tool_round yields empty tool_results
+    mock_client.messages.create.return_value = resp
+    tool_manager = MagicMock()
+
+    result = gen.generate_response(
+        query="What is ML?",
+        tools=[{"name": "search_course_content"}],
+        tool_manager=tool_manager,
+    )
+
+    assert result == "I was unable to process your request."
+    mock_client.messages.create.assert_called_once()
+    tool_manager.execute_tool.assert_not_called()
+
+
 def test_anthropic_exception_propagates(gen, mock_client):
     """
     When client.messages.create() raises an Anthropic exception, it propagates
