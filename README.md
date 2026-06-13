@@ -6,6 +6,12 @@ A Retrieval-Augmented Generation (RAG) system designed to answer questions about
 
 This application is a full-stack web application that enables users to query course materials and receive intelligent, context-aware responses. It uses ChromaDB for vector storage, Anthropic's Claude for AI generation, and provides a web interface for interaction.
 
+## Features
+
+- **Course outline queries** — ask "what does course X cover?" to get a structured overview of all lessons and links, retrieved directly from the course catalog.
+- **Semantic content search** — ask specific topic questions and get answers drawn from the relevant course chunks.
+- **Multi-step reasoning** — Claude can chain up to 2 tool calls per query (configurable via `MAX_TOOL_ROUNDS` in `backend/config.py`), e.g. looking up a course outline and then searching within a specific lesson it reveals.
+
 
 ## Prerequisites
 
@@ -53,4 +59,14 @@ uv run uvicorn app:app --reload --port 8000
 The application will be available at:
 - Web Interface: `http://localhost:8000`
 - API Documentation: `http://localhost:8000/docs`
+
+## Running the Tests
+
+```bash
+# Basic run
+uv run pytest backend/tests/
+
+# Verbose — prints each test name and pass/fail status as tests execute
+uv run pytest backend/tests/ -v
+```
 

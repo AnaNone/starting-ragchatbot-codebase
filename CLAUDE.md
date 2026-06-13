@@ -32,11 +32,14 @@ This is a full-stack RAG (Retrieval-Augmented Generation) chatbot:
 POST /api/query
   → RAGSystem.query()
     → AIGenerator.generate_response()  (Claude API with tool_choice=auto)
-      → Claude calls search_course_content tool
+      → Claude calls get_course_outline or search_course_content tool
         → ToolManager.execute_tool()
-          → CourseSearchTool.execute()
-            → VectorStore.search()  (ChromaDB semantic search)
-      → Claude receives tool results, generates final answer
+          → CourseOutlineTool.execute()  (outline/overview queries)
+              → VectorStore.get_course_outline()  (course_catalog lookup)
+          → CourseSearchTool.execute()  (specific content queries)
+              → VectorStore.search()  (ChromaDB semantic search)
+      ↑ tool calls repeat up to MAX_TOOL_ROUNDS (config.py, default 2)
+      → Claude receives all tool results, generates final answer
   → SessionManager records exchange
   → sources returned from ToolManager.get_last_sources()
 ```
@@ -47,10 +50,10 @@ POST /api/query
 |------|------|
 | `backend/app.py` | FastAPI entrypoint; loads docs from `../docs` on startup |
 | `backend/rag_system.py` | Orchestrator — wires all components together |
-| `backend/ai_generator.py` | Claude API calls; handles tool-use loop (one tool call max per query) |
+| `backend/ai_generator.py` | Claude API calls; handles sequential tool-use loop (up to `MAX_TOOL_ROUNDS` per query) |
 | `backend/vector_store.py` | ChromaDB wrapper; two collections: `course_catalog` and `course_content` |
 | `backend/document_processor.py` | Parses `.txt`/`.pdf`/`.docx` course files → `Course` + `CourseChunk` objects |
-| `backend/search_tools.py` | `Tool` ABC + `CourseSearchTool` + `ToolManager` |
+| `backend/search_tools.py` | `Tool` ABC + `CourseOutlineTool` + `CourseSearchTool` + `ToolManager` |
 | `backend/session_manager.py` | In-memory conversation history (keyed by session ID) |
 | `backend/models.py` | Pydantic models: `Course`, `Lesson`, `CourseChunk` |
 | `backend/config.py` | All tuneable constants (chunk size, model name, history length, etc.) |
@@ -85,3 +88,24 @@ The course title is the primary key — re-uploading a file with the same title 
 - IDs are `{course_title}_{chunk_index}`
 
 Course name resolution in `VectorStore.search()` uses semantic search against `course_catalog` before filtering `course_content`, so partial/fuzzy course names work.
+
+### Registered Claude tools
+
+| Tool name | Class | When Claude uses it |
+|-----------|-------|---------------------|
+| `get_course_outline` | `CourseOutlineTool` | Outline, overview, or "what does course X cover?" queries — reads full lesson list from `course_catalog` |
+| `search_course_content` | `CourseSearchTool` | Specific topic or content questions — semantic chunk search against `course_content` |
+
+Claude may chain these tools across up to `MAX_TOOL_ROUNDS` rounds (default **2**, set in `config.py`). After the budget is exhausted it is force-stopped and must produce a final text answer. Hard tool failures are surfaced as `is_error` tool_result blocks so Claude can still give a best-effort response.
+
+### Tests
+
+```bash
+uv run pytest backend/tests/
+```
+
+| File | Coverage |
+|------|----------|
+| `backend/tests/test_search_tool.py` | `CourseSearchTool` and `CourseOutlineTool` unit tests |
+| `backend/tests/test_ai_generator.py` | `AIGenerator` tool-call wiring, multi-round logic, error handling |
+| `backend/tests/test_rag_system.py` | `RAGSystem.query()` end-to-end flow |
