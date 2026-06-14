@@ -56,11 +56,15 @@ def test_direct_text_no_tool(gen, mock_client):
 def test_tool_use_calls_tool_manager(gen, mock_client):
     """When stop_reason=tool_use, tool_manager.execute_tool() is called with correct name and input."""
     mock_client.messages.create.side_effect = [
-        _tool_use_response("search_course_content", "tu_001", {"query": "neural networks"}),
+        _tool_use_response(
+            "search_course_content", "tu_001", {"query": "neural networks"}
+        ),
         _text_response("Neural networks are inspired by the brain."),
     ]
     tool_manager = MagicMock()
-    tool_manager.execute_tool.return_value = "[ML Intro - Lesson 1]\nNeural networks content..."
+    tool_manager.execute_tool.return_value = (
+        "[ML Intro - Lesson 1]\nNeural networks content..."
+    )
 
     result = gen.generate_response(
         query="Tell me about neural networks",
@@ -76,7 +80,9 @@ def test_tool_use_calls_tool_manager(gen, mock_client):
 def test_tool_result_in_second_api_call(gen, mock_client):
     """The tool result string is included in the second API call as a tool_result message."""
     mock_client.messages.create.side_effect = [
-        _tool_use_response("search_course_content", "tu_xyz789", {"query": "transformers"}),
+        _tool_use_response(
+            "search_course_content", "tu_xyz789", {"query": "transformers"}
+        ),
         _text_response("Transformers use self-attention mechanisms."),
     ]
     tool_manager = MagicMock()
@@ -104,7 +110,11 @@ def test_tools_passed_in_first_call(gen, mock_client):
     tool_def = {
         "name": "search_course_content",
         "description": "Search course materials",
-        "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+        "input_schema": {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+            "required": ["query"],
+        },
     }
     mock_client.messages.create.return_value = _text_response("Direct answer.")
 
@@ -120,7 +130,11 @@ def test_sequential_two_round_tool_use(gen, mock_client):
     """Claude can call a tool, see the results, then call a second tool before answering."""
     mock_client.messages.create.side_effect = [
         _tool_use_response("get_course_outline", "tu_001", {"course_name": "ML Intro"}),
-        _tool_use_response("search_course_content", "tu_002", {"query": "backpropagation", "lesson_number": 3}),
+        _tool_use_response(
+            "search_course_content",
+            "tu_002",
+            {"query": "backpropagation", "lesson_number": 3},
+        ),
         _text_response("Lesson 3 covers backpropagation in detail."),
     ]
     tool_manager = MagicMock()
@@ -137,8 +151,12 @@ def test_sequential_two_round_tool_use(gen, mock_client):
 
     assert mock_client.messages.create.call_count == 3
     assert tool_manager.execute_tool.call_count == 2
-    tool_manager.execute_tool.assert_any_call("get_course_outline", course_name="ML Intro")
-    tool_manager.execute_tool.assert_any_call("search_course_content", query="backpropagation", lesson_number=3)
+    tool_manager.execute_tool.assert_any_call(
+        "get_course_outline", course_name="ML Intro"
+    )
+    tool_manager.execute_tool.assert_any_call(
+        "search_course_content", query="backpropagation", lesson_number=3
+    )
     assert result == "Lesson 3 covers backpropagation in detail."
 
 
@@ -146,7 +164,9 @@ def test_messages_accumulate_across_rounds(gen, mock_client):
     """Every round's tool_use/tool_result messages are threaded into later API calls."""
     mock_client.messages.create.side_effect = [
         _tool_use_response("get_course_outline", "tu_a", {"course_name": "ML Intro"}),
-        _tool_use_response("search_course_content", "tu_b", {"query": "gradient descent"}),
+        _tool_use_response(
+            "search_course_content", "tu_b", {"query": "gradient descent"}
+        ),
         _text_response("Final synthesized answer."),
     ]
     tool_manager = MagicMock()
@@ -160,7 +180,13 @@ def test_messages_accumulate_across_rounds(gen, mock_client):
 
     final_call_kwargs = mock_client.messages.create.call_args_list[2][1]
     messages = final_call_kwargs["messages"]
-    assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant", "user"]
+    assert [m["role"] for m in messages] == [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+    ]
     assert messages[2]["content"][0]["tool_use_id"] == "tu_a"
     assert messages[2]["content"][0]["content"] == "outline result"
     assert messages[4]["content"][0]["tool_use_id"] == "tu_b"
@@ -170,7 +196,9 @@ def test_messages_accumulate_across_rounds(gen, mock_client):
 def test_stops_as_soon_as_claude_is_done(gen, mock_client):
     """The loop exits the moment stop_reason != tool_use, without spending the full round budget."""
     mock_client.messages.create.side_effect = [
-        _tool_use_response("search_course_content", "tu_001", {"query": "transformers"}),
+        _tool_use_response(
+            "search_course_content", "tu_001", {"query": "transformers"}
+        ),
         _text_response("Done after a single round."),
     ]
     tool_manager = MagicMock()
@@ -211,7 +239,9 @@ def test_max_rounds_forces_final_call_without_tools(gen, mock_client):
 def test_hard_tool_error_wraps_up_with_is_error(gen, mock_client):
     """An exception from execute_tool is surfaced as an is_error tool_result and the loop stops immediately."""
     mock_client.messages.create.side_effect = [
-        _tool_use_response("search_course_content", "tu_001", {"query": "transformers"}),
+        _tool_use_response(
+            "search_course_content", "tu_001", {"query": "transformers"}
+        ),
         _text_response("I couldn't search right now, but here's what I know..."),
     ]
     tool_manager = MagicMock()
@@ -236,7 +266,9 @@ def test_empty_tool_results_returns_fallback(gen, mock_client):
     """stop_reason=tool_use but no tool_use blocks in content returns a fallback string, no AttributeError."""
     resp = MagicMock()
     resp.stop_reason = "tool_use"
-    resp.content = []  # no tool_use blocks — _execute_tool_round yields empty tool_results
+    resp.content = (
+        []
+    )  # no tool_use blocks — _execute_tool_round yields empty tool_results
     mock_client.messages.create.return_value = resp
     tool_manager = MagicMock()
 

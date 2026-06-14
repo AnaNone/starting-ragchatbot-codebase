@@ -11,8 +11,10 @@ def rag(tmp_path):
     RAGSystem with in-memory ChromaDB and mocked Anthropic client.
     Yields (system, mock_generate) where mock_generate controls AI responses.
     """
-    with patch("vector_store.chromadb.PersistentClient") as mock_pc, \
-         patch("ai_generator.anthropic.Anthropic"):
+    with (
+        patch("vector_store.chromadb.PersistentClient") as mock_pc,
+        patch("ai_generator.anthropic.Anthropic"),
+    ):
         mock_pc.return_value = chromadb.EphemeralClient()
 
         from rag_system import RAGSystem

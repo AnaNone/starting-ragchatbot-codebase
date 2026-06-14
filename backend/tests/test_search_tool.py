@@ -38,7 +38,9 @@ def real_store_zero(tmp_path):
         )
         store.course_content.add(
             documents=["Machine learning is a subset of artificial intelligence."],
-            metadatas=[{"course_title": "ML Intro", "lesson_number": 1, "chunk_index": 0}],
+            metadatas=[
+                {"course_title": "ML Intro", "lesson_number": 1, "chunk_index": 0}
+            ],
             ids=["chunk_000"],
         )
         yield store
@@ -76,7 +78,9 @@ def test_error_from_store_returns_string_not_raises(mock_store):
 
 def test_empty_results_returns_no_content_message(mock_store):
     """When search returns no documents (and no error), execute() says 'No relevant content found'."""
-    mock_store.search.return_value = SearchResults(documents=[], metadata=[], distances=[])
+    mock_store.search.return_value = SearchResults(
+        documents=[], metadata=[], distances=[]
+    )
     tool = CourseSearchTool(mock_store)
     result = tool.execute(query="What is quantum computing?")
     assert "No relevant content found" in result
@@ -84,7 +88,9 @@ def test_empty_results_returns_no_content_message(mock_store):
 
 def test_passes_course_name_to_store(mock_store):
     """course_name argument is forwarded unchanged to VectorStore.search()."""
-    mock_store.search.return_value = SearchResults(documents=[], metadata=[], distances=[])
+    mock_store.search.return_value = SearchResults(
+        documents=[], metadata=[], distances=[]
+    )
     tool = CourseSearchTool(mock_store)
     tool.execute(query="neural networks", course_name="Deep Learning 101")
     mock_store.search.assert_called_once_with(
@@ -96,7 +102,9 @@ def test_passes_course_name_to_store(mock_store):
 
 def test_passes_lesson_number_to_store(mock_store):
     """lesson_number argument is forwarded unchanged to VectorStore.search()."""
-    mock_store.search.return_value = SearchResults(documents=[], metadata=[], distances=[])
+    mock_store.search.return_value = SearchResults(
+        documents=[], metadata=[], distances=[]
+    )
     tool = CourseSearchTool(mock_store)
     tool.execute(query="backpropagation", lesson_number=3)
     mock_store.search.assert_called_once_with(
@@ -117,7 +125,9 @@ def test_max_results_zero_falls_back_to_five(real_store_zero):
     tool = CourseSearchTool(real_store_zero)
     result = tool.execute(query="machine learning")
     assert isinstance(result, str), "execute() must return a string, not raise"
-    assert "Search error" not in result, f"Expected no 'Search error' after fix, got: {result!r}"
+    assert (
+        "Search error" not in result
+    ), f"Expected no 'Search error' after fix, got: {result!r}"
 
 
 def test_max_results_five_real_chromadb(real_store_good):
