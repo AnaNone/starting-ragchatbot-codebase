@@ -1,9 +1,10 @@
 import anthropic
 from typing import List, Optional
 
+
 class AIGenerator:
     """Handles interactions with Anthropic's Claude API for generating responses"""
-    
+
     # System prompt template - filled in with the configured tool-round budget
     SYSTEM_PROMPT_TEMPLATE = """ You are an AI assistant specialized in course materials and educational content with access to a comprehensive search tool for course information.
 
@@ -37,19 +38,20 @@ Provide only the direct answer to what was asked.
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
         self.max_tool_rounds = max_tool_rounds
-        self.system_prompt = self.SYSTEM_PROMPT_TEMPLATE.format(max_tool_rounds=max_tool_rounds)
+        self.system_prompt = self.SYSTEM_PROMPT_TEMPLATE.format(
+            max_tool_rounds=max_tool_rounds
+        )
 
         # Pre-build base API parameters
-        self.base_params = {
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": 800
-        }
-    
-    def generate_response(self, query: str,
-                         conversation_history: Optional[str] = None,
-                         tools: Optional[List] = None,
-                         tool_manager=None) -> str:
+        self.base_params = {"model": self.model, "temperature": 0, "max_tokens": 800}
+
+    def generate_response(
+        self,
+        query: str,
+        conversation_history: Optional[str] = None,
+        tools: Optional[List] = None,
+        tool_manager=None,
+    ) -> str:
         """
         Generate AI response, allowing Claude to call tools across multiple
         sequential rounds (up to self.max_tool_rounds) before producing a
@@ -79,7 +81,7 @@ Provide only the direct answer to what was asked.
             api_params = {
                 **self.base_params,
                 "messages": messages,
-                "system": system_content
+                "system": system_content,
             }
 
             # Only offer tools while we still have rounds left to use them.
@@ -109,7 +111,7 @@ Provide only the direct answer to what was asked.
                 final_params = {
                     **self.base_params,
                     "messages": messages,
-                    "system": system_content
+                    "system": system_content,
                 }
                 final_response = self.client.messages.create(**final_params)
                 return final_response.content[0].text
@@ -139,21 +141,24 @@ Provide only the direct answer to what was asked.
 
             try:
                 tool_result = tool_manager.execute_tool(
-                    content_block.name,
-                    **content_block.input
+                    content_block.name, **content_block.input
                 )
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": content_block.id,
-                    "content": tool_result
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": content_block.id,
+                        "content": tool_result,
+                    }
+                )
             except Exception as e:
                 fatal_error = True
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": content_block.id,
-                    "content": f"Tool execution failed: {e}",
-                    "is_error": True
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": content_block.id,
+                        "content": f"Tool execution failed: {e}",
+                        "is_error": True,
+                    }
+                )
 
         return tool_results, fatal_error
